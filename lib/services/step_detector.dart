@@ -1,0 +1,82 @@
+import 'dart:math' as math;
+
+/// Accelerometer based step detector with dynamic threshold
+/// and rhythm validation.
+class StepDetector {
+  StepDetector({required this.onStep});
+
+  /// Called for every validated step.
+  /// [count] is how many steps to add (4 on first validation, then 1).
+  final void Function(int count) onStep;
+
+  // Tunable values
+  static const int _minStepIntervalMs = 280;
+  static const int _maxStepIntervalMs = 2000;
+  static const int _stepsToValidate = 4;
+  static const double _minThreshold = 0.9;
+
+  double _gravity = 9.8; // slow baseline (removes gravity)
+  double _smoothed = 0.0; // light smoothing
+  double _avgAbs = 0.0; // recent movement level
+
+  bool _isPeak = false;
+  int _lastStepTime = 0;
+  int _pendingSteps = 0;
+  bool _validated = false;
+
+  void onAccelerometer(double x, double y, double z) {
+    final magnitude = math.sqrt(x * x + y * y + z * z);
+
+    // High-pass: gravity ko slow average se nikalo
+    _gravity = _gravity * 0.95 + magnitude * 0.05;
+    final dynamic = magnitude - _gravity;
+
+    // Light low-pass (kam smoothing taake aahista chalne par steps miss na hon)
+    _smoothed = _smoothed * 0.6 + dynamic * 0.4;
+
+    // Dynamic threshold
+    _avgAbs = _avgAbs * 0.98 + _smoothed.abs() * 0.02;
+    final threshold = math.max(_minThreshold, _avgAbs * 1.6);
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final gap = now - _lastStepTime;
+
+    if (_smoothed > threshold && !_isPeak && gap > _minStepIntervalMs) {
+      _isPeak = true;
+      _registerStep(now, gap);
+    } else if (_smoothed < threshold * 0.5) {
+      _isPeak = false;
+    }
+  }
+
+  void _registerStep(int now, int gap) {
+    // Bohat der baad aya step: rhythm toot gayi
+    if (gap > _maxStepIntervalMs) {
+      _pendingSteps = 0;
+      _validated = false;
+    }
+    _lastStepTime = now;
+
+    if (_validated) {
+      onStep(1);
+      return;
+    }
+
+    _pendingSteps++;
+    if (_pendingSteps >= _stepsToValidate) {
+      _validated = true;
+      onStep(_pendingSteps); // pehle ke steps bhi count karo
+      _pendingSteps = 0;
+    }
+  }
+
+  void reset() {
+    _gravity = 9.8;
+    _smoothed = 0;
+    _avgAbs = 0;
+    _isPeak = false;
+    _lastStepTime = 0;
+    _pendingSteps = 0;
+    _validated = false;
+  }
+}
