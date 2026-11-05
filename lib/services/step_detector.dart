@@ -20,8 +20,8 @@ class StepDetector {
   void onAccelerometer(double x, double y, double z) {
     final magnitude = math.sqrt(x * x + y * y + z * z);
     _gravity = _gravity * 0.95 + magnitude * 0.05;
-    final dynamic = magnitude - _gravity;
-    _smoothed = _smoothed * 0.6 + dynamic * 0.4;
+    final dynamicAccel = magnitude - _gravity;
+    _smoothed = _smoothed * 0.6 + dynamicAccel * 0.4;
     _avgAbs = _avgAbs * 0.98 + _smoothed.abs() * 0.02;
     
     final threshold = math.max(_minThreshold, _avgAbs * 1.6);

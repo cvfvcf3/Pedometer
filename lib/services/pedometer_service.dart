@@ -24,14 +24,24 @@ class PedometerService {
     _detector = StepDetector(onStep: (count) => _eventController.add(StepEvent(false, count)));
   }
 
-  Future<void> startTracking() async {
+  /// Returns true if activity permission is granted (hardware counter used),
+  /// false if denied (software fallback is started instead).
+  Future<bool> startTracking() async {
+    stopTracking();
     if (Platform.isAndroid) {
-      final status = await Permission.activityRecognition.status;
+      var status = await Permission.activityRecognition.status;
       if (!status.isGranted) {
-        final req = await Permission.activityRecognition.request();
-        if (req.isGranted) { _startHardware(); } else { _startSoftware(); }
-      } else { _startHardware(); }
-    } else { _startHardware(); }
+        status = await Permission.activityRecognition.request();
+      }
+      if (status.isGranted) {
+        _startHardware();
+        return true;
+      }
+      _startSoftware();
+      return false;
+    }
+    _startHardware();
+    return true;
   }
 
   void _startHardware() {

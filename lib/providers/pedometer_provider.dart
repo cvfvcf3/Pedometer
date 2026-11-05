@@ -21,6 +21,7 @@ class PedometerProvider extends ChangeNotifier {
   StreamSubscription<StepEvent>? _subscription;
   SharedPreferences? _prefs;
   Timer? _sessionTicker;
+  bool _initialized = false;
 
   TrackingStatus _status = TrackingStatus.loading;
   int _todaySteps = 0;
@@ -59,9 +60,12 @@ class PedometerProvider extends ChangeNotifier {
   Future<void> init() async {
     _setStatus(TrackingStatus.loading);
     _todayDate = dateKey(DateTime.now());
-    try { await _repository.closeOrphanedSessions(); } catch (_) {}
+    if (!_initialized) {
+      try { await _repository.closeOrphanedSessions(); } catch (_) {}
+      _initialized = true;
+    }
     await _refreshToday();
-    _startTracking();
+    await _startTracking();
   }
 
   Future<void> requestPermission() async => init();
@@ -115,13 +119,15 @@ class PedometerProvider extends ChangeNotifier {
     } catch (_) { _todaySteps = 0; _todaySessions = const []; }
   }
 
-  void _startTracking() {
-    _subscription?.cancel(); _service.startTracking();
+  Future<void> _startTracking() async {
+    _subscription?.cancel();
     _subscription = _service.eventStream.listen(
       (event) => _handleStep(event),
       onError: (Object error) { _errorMessage = error.toString(); _setStatus(TrackingStatus.error); },
     );
-    _errorMessage = null; _setStatus(TrackingStatus.running);
+    _errorMessage = null;
+    final granted = await _service.startTracking();
+    _setStatus(granted ? TrackingStatus.running : TrackingStatus.permissionDenied);
   }
 
   Future<void> _handleStep(StepEvent event) async {
@@ -158,4 +164,19 @@ class PedometerProvider extends ChangeNotifier {
     try {
       await _repository.addStepsToSession(sessionId, delta);
       _todaySteps += delta; _activeSessionSteps += delta;
-      _todaySessions = _todaySessions.map((s) => s.id == sessionId ? s.copyWith(steps: s.steps + delta) : s).to
+      _todaySessions = _todaySessions.map((s) => s.id == sessionId ? s.copyWith(steps: s.steps + delta) : s).toList();
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  void _startTicker() {
+    _sessionTicker?.cancel();
+    _sessionTicker = Timer.periodic(const Duration(seconds: 1), (_) { if (_activeSessionId != null) notifyListeners(); });
+  }
+
+  void _stopTicker() { _sessionTicker?.cancel(); _sessionTicker = null; }
+  void _setStatus(TrackingStatus status) { _status = status; notifyListeners(); }
+
+  @override
+  void dispose() { _subscription?.cancel(); _service.dispose(); _stopTicker(); super.dispose(); }
+}
