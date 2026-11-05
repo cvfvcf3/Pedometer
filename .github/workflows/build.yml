@@ -1,0 +1,97 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Scaffold android and ios folders
+        run: |
+          set -e
+          flutter create --org com.example --project-name step_tracker --platforms=android,ios "$RUNNER_TEMP/scaffold"
+          cp -R "$RUNNER_TEMP/scaffold/android" ./android
+          cp -R "$RUNNER_TEMP/scaffold/ios" ./ios
+
+      - name: Patch Android files
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          
+          # 1. Patch build.gradle / build.gradle.kts
+          gradle = pathlib.Path('android/app/build.gradle')
+          if gradle.exists():
+              text = gradle.read_text()
+              text = text.replace('minSdkVersion flutter.minSdkVersion', 'minSdkVersion 24')
+              text = text.replace('minSdkVersion 21', 'minSdkVersion 24')
+              text = text.replace('compileSdk flutter.compileSdkVersion', 'compileSdk 37')
+              text = text.replace('targetSdkVersion flutter.targetSdkVersion', 'targetSdkVersion 37')
+              gradle.write_text(text)
+          
+          gradle_kts = pathlib.Path('android/app/build.gradle.kts')
+          if gradle_kts.exists():
+              text = gradle_kts.read_text()
+              text = text.replace('minSdk = flutter.minSdkVersion', 'minSdk = 24')
+              text = text.replace('minSdk = 21', 'minSdk = 24')
+              text = text.replace('compileSdk = flutter.compileSdkVersion', 'compileSdk = 37')
+              text = text.replace('targetSdk = flutter.targetSdkVersion', 'targetSdk = 37')
+              gradle_kts.write_text(text)
+
+          # 2. Patch manifest for permissions and app name
+          manifest = pathlib.Path('android/app/src/main/AndroidManifest.xml')
+          text = manifest.read_text()
+          permission = '    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />\n'
+          if 'ACTIVITY_RECOGNITION' not in text:
+              text = text.replace('<application', permission + '    <application', 1)
+          text = text.replace('android:label="step_tracker"', 'android:label="Step Tracker"')
+          manifest.write_text(text)
+          
+          print("Android patches applied successfully.")
+          PY
+
+      - name: Patch iOS Info.plist
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          plist = pathlib.Path('ios/Runner/Info.plist')
+          text = plist.read_text()
+          if 'NSMotionUsageDescription' not in text:
+              entry = '\t<key>NSMotionUsageDescription</key>\n\t<string>Motion access is used to count your steps.</string>\n'
+              text = text.replace('</dict>\n</plist>', entry + '</dict>\n</plist>')
+              plist.write_text(text)
+          print("iOS patch applied successfully.")
+          PY
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: pedometer-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
