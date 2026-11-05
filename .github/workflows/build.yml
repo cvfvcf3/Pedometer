@@ -35,8 +35,6 @@ jobs:
         run: |
           python3 - <<'PY'
           import pathlib
-          
-          # 1. Patch build.gradle / build.gradle.kts
           gradle = pathlib.Path('android/app/build.gradle')
           if gradle.exists():
               text = gradle.read_text()
@@ -55,7 +53,6 @@ jobs:
               text = text.replace('targetSdk = flutter.targetSdkVersion', 'targetSdk = 37')
               gradle_kts.write_text(text)
 
-          # 2. Patch manifest for permissions and app name
           manifest = pathlib.Path('android/app/src/main/AndroidManifest.xml')
           text = manifest.read_text()
           permission = '    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />\n'
@@ -63,8 +60,6 @@ jobs:
               text = text.replace('<application', permission + '    <application', 1)
           text = text.replace('android:label="step_tracker"', 'android:label="Step Tracker"')
           manifest.write_text(text)
-          
-          print("Android patches applied successfully.")
           PY
 
       - name: Patch iOS Info.plist
@@ -77,7 +72,6 @@ jobs:
               entry = '\t<key>NSMotionUsageDescription</key>\n\t<string>Motion access is used to count your steps.</string>\n'
               text = text.replace('</dict>\n</plist>', entry + '</dict>\n</plist>')
               plist.write_text(text)
-          print("iOS patch applied successfully.")
           PY
 
       - name: Install dependencies

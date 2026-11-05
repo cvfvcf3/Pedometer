@@ -1,14 +1,7 @@
-# Step Tracker — Pedometer App (Hybrid)
+# Step Tracker — Pedometer App (Complete)
 
 ## Features
-- Hybrid Step Counting (Hardware + Software fallback)
-- **Software Fallback updated with Dynamic Threshold & Rhythm validation**
+- Hybrid Step Counting (Hardware + Advanced Software Fallback)
 - Ring shows current session steps, total steps shown below
 - Session-based tracking
 - History, dark mode, EN/UR
-
-## Files
-| File | Purpose |
-|---|---|
-| `lib/services/step_detector.dart` | New: Advanced accelerometer step detector with rhythm check |
-| `lib/services/pedometer_service.dart` | Updated: Uses StepDetector for software fallback |
